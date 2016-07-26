@@ -6,6 +6,11 @@ get_project_dir() {
   echo "$root_project_dir/$repo_name"
 }
 
+change_dir_magic() {
+  local project_dir="$1"
+  cd "$project_dir"; exec "$SHELL"
+}
+
 check_master(){
   CURRENT_BRANCH=`git rev-parse --abbrev-ref HEAD`
   if [ "$CURRENT_BRANCH" != "master" ]; then
@@ -42,7 +47,7 @@ fireup_repo() {
   local repo_name="$3"
   local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
   if [ ! -d "$project_dir" ]; then
-    git clone "git@github.com/$github_owner/$repo_name.git" "$project_dir" || return 1
+    git clone "git@github.com:$github_owner/$repo_name.git" "$project_dir" || return 1
   fi
   cd "$project_dir"
 }
@@ -145,6 +150,8 @@ main(){
     github_owner='octoblu'
   fi
 
+  local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
+
   fireup_repo "$root_project_dir" "$github_owner" "$repo_name"
   local fireup_repo_okay="$?"
   if [ "$fireup_repo_okay" != "0" ]; then
@@ -165,17 +172,14 @@ main(){
     exit 1
   fi
 
-  local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
-
   open_in_atom "$project_dir"
 
   local project_type="$(get_project_type "$project_dir")"
   if [ "$project_type" == 'node' ]; then
     update_node_project
   fi
-
-
-  echo "Run: cd $project_dir"
+  
+  change_dir_magic "$project_dir"
 }
 
 main "$@"
