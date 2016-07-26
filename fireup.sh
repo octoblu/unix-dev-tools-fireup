@@ -48,7 +48,8 @@ fireup_repo() {
 }
 
 open_in_atom() {
-  atom .
+  local project_dir="$1"
+  atom "$project_dir"
 }
 
 update_node_project() {
@@ -58,8 +59,10 @@ update_node_project() {
 }
 
 get_project_type() {
-  if [ -f "./package.json" ]; then
+  local project_dir="$1"
+  if [ -f "$project_dir/package.json" ]; then
     echo 'node'
+    return 0
   fi
   echo 'other'
 }
@@ -162,13 +165,16 @@ main(){
     exit 1
   fi
 
-  open_in_atom
-  local project_type="$(get_project_type)"
+  local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
+
+  open_in_atom "$project_dir"
+
+  local project_type="$(get_project_type "$project_dir")"
   if [ "$project_type" == 'node' ]; then
     update_node_project
   fi
 
-  local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
+
   echo "Run: cd $project_dir"
 }
 
