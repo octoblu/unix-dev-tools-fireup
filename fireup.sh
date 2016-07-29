@@ -1,5 +1,20 @@
 #!/bin/bash
 
+script_directory(){
+  local source="${BASH_SOURCE[0]}"
+  local dir=""
+
+  while [ -h "$source" ]; do # resolve $source until the file is no longer a symlink
+    dir="$( cd -P "$( dirname "$source" )" && pwd )"
+    source="$(readlink "$source")"
+    [[ $source != /* ]] && source="$dir/$source" # if $source was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+  done
+
+  dir="$( cd -P "$( dirname "$source" )" && pwd )"
+
+  echo "$dir"
+}
+
 get_project_dir() {
   local root_project_dir="$1"
   local repo_name="$2"
@@ -7,11 +22,13 @@ get_project_dir() {
 }
 
 change_dir_magic() {
+  echo '* magically changing to project directory'
   local project_dir="$1"
   cd "$project_dir"; exec "$SHELL"
 }
 
 check_master(){
+  echo '* checking if master'
   CURRENT_BRANCH=`git rev-parse --abbrev-ref HEAD`
   if [ "$CURRENT_BRANCH" != "master" ]; then
     echo ''
@@ -23,6 +40,7 @@ check_master(){
 }
 
 check_git(){
+  echo '* checking git'
   git fetch origin
   local get_log="$(git log HEAD..origin/master --oneline)"
   if [[ -n "$get_log" ]]; then
@@ -41,23 +59,62 @@ check_git(){
   fi
 }
 
+create_repo() {
+  local create="$1"
+  local github_owner="$2"
+  local repo_name="$3"
+  local project_dir="$4"
+  if [ "$create" == "false" ]; then
+    echo '* not creating'
+    return 1
+  fi
+  echo '* creating repo'
+  local template_dir="$(script_directory)/project-template"
+  mkdir -p "$project_dir" && \
+    cd "$project_dir" && \
+    git init && \
+    cp $template_dir/* "$project_dir" && \
+    hub create "$github_owner/$repo_name" && \
+    git add . && \
+    git commit -m "initial commit" && \
+    git push --set-upstream origin master
+}
+
+clone_repo() {
+  local github_owner="$1"
+  local repo_name="$2"
+  local project_dir="$3"
+  git clone "git@github.com:$github_owner/$repo_name.git" "$project_dir" 2> /dev/null
+}
+
 fireup_repo() {
   local root_project_dir="$1"
   local github_owner="$2"
   local repo_name="$3"
+  local create="$4"
+  echo '* firing up'
   local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
   if [ ! -d "$project_dir" ]; then
-    git clone "git@github.com:$github_owner/$repo_name.git" "$project_dir" || return 1
+     clone_repo "$github_owner" "$repo_name" "$project_dir" || \
+      create_repo "$create" "$github_owner" "$repo_name" "$project_dir" || return 1
   fi
   cd "$project_dir"
 }
 
 open_in_atom() {
   local project_dir="$1"
-  atom "$project_dir"
+  local add_to_atom="$2"
+  if [ "$add_to_atom" == "true" ]; then
+    echo '* adding to atom window'
+    atom "$project_dir" --add
+  else
+    echo '* opening in atom window'
+    atom "$project_dir"
+  fi
 }
 
 update_node_project() {
+  echo '* updating node project'
   rm -rf node_modules && \
     npm install && \
     npm-check -u
@@ -73,36 +130,26 @@ get_project_type() {
 }
 
 usage(){
-  echo 'USAGE: fireup <repo-name>'
+  echo 'USAGE: fireup <repo-name> [options]'
   echo ''
   echo 'Arguments:'
-  echo '  -h, --help      print this help text'
-  echo '  -v, --version   print the version'
+  echo '  -a, --add          add project to the last open atom window'
+  echo '  -c, --create       create a public project if it does not exist'
+  echo '  -s, --skip-upgrade skip upgrading project'
+  echo '  -h, --help         print this help text'
+  echo '  -v, --version      print the version'
   echo ''
   echo 'Enviroment:'
   echo '  FIREUP_ROOT_PROJECT_DIR="/path/to/projects" - defaults to "$HOME/Projects/Octoblu"'
   echo '  FIREUP_GITHUB_OWNER="github-user-name" - defaults to "octoblu"'
   echo 'But what does it do? It will:'
   echo '  1. Clone the repo if needed'
+  echo '  1. Create repo if "--create", or "-c" is set. This will be public.'
   echo '  2. Make sure the project is update to date'
-  echo '  3. Open in ATOM'
-  echo '  4. Update dependencies'
+  echo '  3. Open in ATOM window'
+  echo '     - if "--add" or "-a" is set it will add to the latest atom window'
+  echo '  4. Update dependencies unless "--skip-upgrade", or "-s" is set.'
   echo '     - If node project, remove node_modules, run npm install, and npm-check -u'
-}
-
-script_directory(){
-  local source="${BASH_SOURCE[0]}"
-  local dir=""
-
-  while [ -h "$source" ]; do # resolve $source until the file is no longer a symlink
-    dir="$( cd -P "$( dirname "$source" )" && pwd )"
-    source="$(readlink "$source")"
-    [[ $source != /* ]] && source="$dir/$source" # if $source was a relative symlink, we need to resolve it relative to the path where the symlink file was located
-  done
-
-  dir="$( cd -P "$( dirname "$source" )" && pwd )"
-
-  echo "$dir"
 }
 
 version(){
@@ -114,20 +161,44 @@ version(){
 }
 
 main(){
-  local cmd="$1"
-  local cmd2="$2"
+  local add_to_atom="false"
+  local skip_upgrade="false"
+  local create="false"
+  local repo_name="$1"; shift;
+  while [ "$1" != "" ]; do
+    PARAM=`echo $1 | awk -F= '{print $1}'`
+    VALUE=`echo $1 | awk -F= '{print $2}'`
+    case $PARAM in
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      -v | --version)
+        version
+        exit 0
+        ;;
+      -a | --add)
+        add_to_atom="true"
+        ;;
+      -s | --skip-upgrade)
+        skip_upgrade="true"
+        ;;
+      -c | --create)
+        create="true"
+        ;;
+      *)
+        echo "ERROR: unknown parameter \"$PARAM\""
+        usage
+        exit 1
+        ;;
+    esac
+    shift
+  done
 
-  if [ "$cmd" == '--help' -o "$cmd" == '-h' ]; then
-    usage
-    exit 0
+  if [ -z "$(which hub)" ]; then
+    echo 'Missing required dependency "hub"'
+    exit 1
   fi
-
-  if [ "$cmd" == '--version' -o "$cmd" == '-v' ]; then
-    version
-    exit 0
-  fi
-
-  local repo_name="$cmd"
 
   if [ -z "$repo_name" ]; then
     usage
@@ -152,7 +223,7 @@ main(){
 
   local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
 
-  fireup_repo "$root_project_dir" "$github_owner" "$repo_name"
+  fireup_repo "$root_project_dir" "$github_owner" "$repo_name" "$create"
   local fireup_repo_okay="$?"
   if [ "$fireup_repo_okay" != "0" ]; then
     echo 'Unable to fireup the project'
@@ -172,13 +243,15 @@ main(){
     exit 1
   fi
 
-  open_in_atom "$project_dir"
+  open_in_atom "$project_dir" "$add_to_atom"
 
-  local project_type="$(get_project_type "$project_dir")"
-  if [ "$project_type" == 'node' ]; then
-    update_node_project
+  if [ "$skip_upgrade" != "true" ]; then
+    local project_type="$(get_project_type "$project_dir")"
+    if [ "$project_type" == 'node' ]; then
+      update_node_project
+    fi
   fi
-  
+
   change_dir_magic "$project_dir"
 }
 
