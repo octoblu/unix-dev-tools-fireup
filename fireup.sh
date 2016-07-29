@@ -1,5 +1,29 @@
 #!/bin/bash
 
+read -r -d '' LICENSE_CONTENT << EOM
+The MIT License (MIT)
+
+Copyright (c) 2016 Octoblu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+EOM
+
 script_directory(){
   local source="${BASH_SOURCE[0]}"
   local dir=""
@@ -62,30 +86,7 @@ check_git(){
 init_repo() {
   local project_dir="$1"
   local repo_name="$2"
-  cat > "$project_dir/LICENSE" <<- EOM
-The MIT License (MIT)
-
-Copyright (c) 2016 Octoblu
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-EOM
-
+  echo "$LICENSE_CONTENT" > "$project_dir/LICENSE"
   echo "# ${repo_name}" > "$project_dir/README.md"
 }
 
@@ -193,11 +194,12 @@ main(){
   local add_to_atom="false"
   local skip_upgrade="false"
   local create="false"
-  local repo_name="$1"; shift;
+
+  local repo_name="$1";
   while [ "$1" != "" ]; do
-    PARAM=`echo $1 | awk -F= '{print $1}'`
-    VALUE=`echo $1 | awk -F= '{print $2}'`
-    case $PARAM in
+    local param=`echo $1 | awk -F= '{print $1}'`
+    local value=`echo $1 | awk -F= '{print $2}'`
+    case $param in
       -h | --help)
         usage
         exit 0
@@ -216,9 +218,12 @@ main(){
         create="true"
         ;;
       *)
-        echo "ERROR: unknown parameter \"$PARAM\""
-        usage
-        exit 1
+        if [ -z "$repo_name" ]; then
+            echo "ERROR: unknown parameter \"$param\""
+            usage
+            exit 1
+        fi
+        repo_name="$param"
         ;;
     esac
     shift
