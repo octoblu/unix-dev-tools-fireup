@@ -3,7 +3,7 @@
 read -r -d '' LICENSE_CONTENT << EOM
 The MIT License (MIT)
 
-Copyright (c) 2016 Octoblu
+Copyright (c) 2017 Octoblu
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -37,12 +37,6 @@ script_directory(){
   dir="$( cd -P "$( dirname "$source" )" && pwd )"
 
   echo "$dir"
-}
-
-get_project_dir() {
-  local root_project_dir="$1"
-  local repo_name="$2"
-  echo "$root_project_dir/$repo_name"
 }
 
 change_dir_magic() {
@@ -118,14 +112,13 @@ clone_repo() {
 }
 
 fireup_repo() {
-  local root_project_dir="$1"
+  local project_dir="$1"
   local github_owner="$2"
   local repo_name="$3"
   local create="$4"
   echo '* firing up'
-  local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
   if [ ! -d "$project_dir" ]; then
-     clone_repo "$github_owner" "$repo_name" "$project_dir" || \
+    clone_repo "$github_owner" "$repo_name" "$project_dir" || \
       create_repo "$create" "$github_owner" "$repo_name" "$project_dir" || return 1
   fi
   cd "$project_dir"
@@ -145,9 +138,7 @@ open_in_atom() {
 
 update_node_project() {
   echo '* updating node project'
-  rm -rf node_modules && \
-    npm install && \
-    npm-check -u
+  yarn install
 }
 
 get_project_type() {
@@ -179,7 +170,7 @@ usage(){
   echo '  3. Open in ATOM window'
   echo '     - if "--add" or "-a" is set it will add to the latest atom window'
   echo '  4. Update dependencies unless "--skip-upgrade", or "-s" is set.'
-  echo '     - If node project, remove node_modules, run npm install, and npm-check -u'
+  echo '     - If node project run `yarn install`'
 }
 
 version(){
@@ -240,14 +231,13 @@ main(){
     exit 1
   fi
 
-  local root_project_dir="$FIREUP_ROOT_PROJECT_DIR"
-  if [ -z "$root_project_dir" ]; then
-    root_project_dir="$HOME/Projects/Octoblu"
-  fi
-
-  if [ ! -d "$root_project_dir" ]; then
-    echo "Invalid Root Project directory, $root_project_dir"
-    exit 1
+  local project_dir
+  if [ -d "$PWD/$repo_name" ]; then
+    project_dir="$PWD/$repo_name"
+  elif [ -n "$FIREUP_ROOT_PROJECT_DIR" ]; then
+    project_dir="$FIREUP_ROOT_PROJECT_DIR/$repo_name"
+  else
+    project_dir="$HOME/Projects/Octoblu/$repo_name"
   fi
 
   local github_owner="$FIREUP_GITHUB_OWNER"
@@ -255,9 +245,7 @@ main(){
     github_owner='octoblu'
   fi
 
-  local project_dir="$(get_project_dir "$root_project_dir" "$repo_name")"
-
-  fireup_repo "$root_project_dir" "$github_owner" "$repo_name" "$create"
+  fireup_repo "$project_dir" "$github_owner" "$repo_name" "$create"
   local fireup_repo_okay="$?"
   if [ "$fireup_repo_okay" != "0" ]; then
     echo 'Unable to fireup the project'
